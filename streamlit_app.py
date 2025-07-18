@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from io import BytesIO
 
 # Set wide layout
 st.set_page_config(layout="wide")
@@ -50,12 +51,16 @@ if uploaded_file:
     st.markdown(f"### 🔍 Preview of: `{sheet_name}`")
     st.dataframe(df, use_container_width=True, height=600)
 
-    # Download filtered data
+    # Convert dataframe to downloadable Excel file
     @st.cache_data
-    def convert_df(df):
-        return df.to_excel(index=False, engine='openpyxl')
+    def convert_df_to_excel(df):
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False)
+        output.seek(0)
+        return output
 
-    excel_bytes = convert_df(df)
+    excel_bytes = convert_df_to_excel(df)
     st.download_button(
         label="📥 Download Filtered Data as Excel",
         data=excel_bytes,
