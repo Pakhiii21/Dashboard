@@ -59,7 +59,6 @@ if uploaded_file:
             if "tps" in col_str:
                 col_map['tps'] = col
 
-        # Show all available columns (for debugging)
         st.write("Detected columns:", col_map)
 
         for key in ['moisture', 'protein', 'ash', 'drc', 'tps']:
@@ -93,11 +92,11 @@ if uploaded_file:
             else:
                 st.success("All vendors meet the defined quality parameters.")
 
-        # Plot graphs
+        # Plot graphs for all parameters
         st.markdown("### Parameter Distributions")
-        for key in ['moisture', 'protein', 'ash']:
+        for key in ['moisture', 'protein', 'ash', 'drc', 'tps']:
             if key in col_map:
-                fig = px.box(df, y=col_map[key], points="all", title=f"{key.title()} % Distribution")
+                fig = px.box(df, y=col_map[key], points="all", title=f"{key.upper()} Distribution")
                 st.plotly_chart(fig, use_container_width=True)
 
         # Search
