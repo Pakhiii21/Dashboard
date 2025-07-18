@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-
+from io import BytesIO
 # Set wide layout
 st.set_page_config(layout="wide")
 
@@ -39,7 +39,7 @@ if uploaded_file:
 
     # File and sheet info
     st.markdown(f"🗂️ **File:** `{uploaded_file.name}`  |  📄 **Sheet:** `{sheet_name}`")
-    st.markdown(f"🧮 Rows: **{df.shape[0]}** | Columns: **{df.shape[1]}**")
+    st.markdown(f" Rows: **{df.shape[0]}** | Columns: **{df.shape[1]}**")
 
     # Search box
     search = st.text_input("🔍 Search within data:")
