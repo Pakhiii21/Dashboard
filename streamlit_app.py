@@ -62,7 +62,6 @@ def convert_df(df):
     return output.getvalue()
 
 excel_bytes = convert_df(df)
-
 st.download_button(
     label="📥 Download Filtered Data as Excel",
     data=excel_bytes,
