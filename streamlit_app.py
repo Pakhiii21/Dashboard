@@ -9,11 +9,19 @@ st.markdown("<h2 style='color:#2c3e50;'>📊 WEEKLY DASHBOARD</h2>", unsafe_allo
 
 # Upload section
 st.markdown("""
-<div style="background-color:#f9f9f9;padding:15px;border-radius:10px">
-<h4>📤 Upload your Excel file</h4>
-<p>Supported format: <strong>.xlsx</strong> | Max size: 200MB</p>
+<div style="
+    background-color:#e6f0f5;
+    padding:16px;
+    border-radius:10px;
+    border:1px solid #d0dce0;
+    color:#1c1c1c;
+">
+    <h4 style="margin-bottom:8px;">📤 Upload your Excel file</h4>
+    <p style="margin:0;">Supported format: <strong>.xlsx</strong> | Max size: 200MB</p>
 </div>
 """, unsafe_allow_html=True)
+
+
 
 # Upload file
 uploaded_file = st.file_uploader("", type=["xlsx"])
