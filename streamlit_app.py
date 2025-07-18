@@ -6,10 +6,10 @@ import seaborn as sns
 
 st.title("Jubilant Lab Weekly Dashboard")
 
-uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
+   uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
 
-if uploaded_file is not None:
-    xls = pd.ExcelFile(uploaded_file)
+    if uploaded_file is not None:
+      xls = pd.ExcelFile(uploaded_file)
     
     # Start your logic here
     results_raw = pd.read_excel(xls, sheet_name="RWF RESULTS", header=None, skiprows=5)
