@@ -7,7 +7,7 @@ st.set_page_config(layout="wide")
 # Page Title
 st.markdown("<h2 style='color:#2c3e50;'>📊 WEEKLY DASHBOARD</h2>", unsafe_allow_html=True)
 
-# Upload section
+# Upload section with soft blue background
 st.markdown("""
 <div style="
     background-color:#e6f0f5;
@@ -29,30 +29,27 @@ if uploaded_file:
         xls = pd.ExcelFile(uploaded_file)
         sheet_name = st.selectbox("📄 Select a sheet to view:", xls.sheet_names)
 
-        # Load selected sheet without forcing skiprows
+        # Load sheet
         try:
             df = pd.read_excel(xls, sheet_name=sheet_name)
         except Exception as e:
             st.error(f"❌ Error reading sheet: {e}")
             st.stop()
 
-        # Replace NaN/None with blanks
         df.fillna("", inplace=True)
 
-        # File and sheet info
         st.markdown(f"🗂️ **File:** `{uploaded_file.name}`  |  📄 **Sheet:** `{sheet_name}`")
         st.markdown(f"🧮 Rows: **{df.shape[0]}** | Columns: **{df.shape[1]}**")
 
-        # Search box
+        # Search
         search = st.text_input("🔍 Search within data:")
         if search:
             df = df[df.apply(lambda row: row.astype(str).str.contains(search, case=False).any(), axis=1)]
 
-        # Preview
         st.markdown(f"### 🔍 Preview of: `{sheet_name}`")
         st.dataframe(df, use_container_width=True, height=600)
 
-        # Download filtered data
+        # Download
         @st.cache_data
         def convert_df(df):
             import io
@@ -72,7 +69,7 @@ if uploaded_file:
     except Exception as e:
         st.error(f"⚠️ Unable to read file: {e}")
 
-# Custom styling
+# Styling
 st.markdown("""
 <style>
 .stDataFrame tbody td {
@@ -93,7 +90,7 @@ footer {
 body, .stApp {
     font-family: 'Segoe UI', 'Roboto', sans-serif;
     font-size: 15px;
-    background-color: #f8f9fa;
+    background-color: white;
 }
 </style>
 """, unsafe_allow_html=True)
