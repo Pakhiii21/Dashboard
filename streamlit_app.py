@@ -1,12 +1,21 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# Load Excel file
-file_path = "Weekly update 1.xlsx"  # <-- Change this if filename differs
+st.title("Jubilant Lab Weekly Dashboard")
+
 uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
+
 if uploaded_file is not None:
     xls = pd.ExcelFile(uploaded_file)
+    
+    # Start your logic here
+    results_raw = pd.read_excel(xls, sheet_name="RWF RESULTS", header=None, skiprows=5)
+    trend_raw = pd.read_excel(xls, sheet_name="RWF TREND", header=None, skiprows=1)
+    
+    # Continue with your data processing...
 
 
 # Step 1: Read sheets with raw headers
