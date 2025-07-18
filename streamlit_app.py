@@ -29,15 +29,17 @@ if uploaded_file:
         xls = pd.ExcelFile(uploaded_file)
         sheet_name = st.selectbox("📄 Select a sheet to view:", xls.sheet_names)
 
+        # Load selected sheet without forcing skiprows
         try:
-            df = pd.read_excel(xls, sheet_name=sheet_name, header=1)  # Try to skip first row
-        except Exception as e:
-            st.warning(f"⚠️ Could not read using header row 2. Using default headers instead.")
             df = pd.read_excel(xls, sheet_name=sheet_name)
+        except Exception as e:
+            st.error(f"❌ Error reading sheet: {e}")
+            st.stop()
 
+        # Replace NaN/None with blanks
         df.fillna("", inplace=True)
 
-        # Info section
+        # File and sheet info
         st.markdown(f"🗂️ **File:** `{uploaded_file.name}`  |  📄 **Sheet:** `{sheet_name}`")
         st.markdown(f"🧮 Rows: **{df.shape[0]}** | Columns: **{df.shape[1]}**")
 
@@ -53,9 +55,10 @@ if uploaded_file:
         # Download filtered data
         @st.cache_data
         def convert_df(df):
-            from io import BytesIO
-            output = BytesIO()
-            df.to_excel(output, index=False, engine='openpyxl')
+            import io
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False)
             return output.getvalue()
 
         excel_bytes = convert_df(df)
@@ -66,30 +69,31 @@ if uploaded_file:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        # Styling
-        st.markdown("""
-        <style>
-        .stDataFrame tbody td {
-            white-space: normal;
-            word-wrap: break-word;
-            border: 1px solid #d3d3d3;
-        }
-        .stDataFrame thead th {
-            background-color: #f0f0f0;
-            border: 1px solid #d3d3d3;
-        }
-        .block-container {
-            padding-bottom: 0rem !important;
-        }
-        footer {
-            visibility: hidden;
-        }
-        body, .stApp {
-            font-family: 'Segoe UI', 'Roboto', sans-serif;
-            font-size: 15px;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
     except Exception as e:
-        st.error(f"❌ Error reading the file: {e}")
+        st.error(f"⚠️ Unable to read file: {e}")
+
+# Custom styling
+st.markdown("""
+<style>
+.stDataFrame tbody td {
+    white-space: normal;
+    word-wrap: break-word;
+    border: 1px solid #d3d3d3;
+}
+.stDataFrame thead th {
+    background-color: #f0f0f0;
+    border: 1px solid #d3d3d3;
+}
+.block-container {
+    padding-bottom: 0rem !important;
+}
+footer {
+    visibility: hidden;
+}
+body, .stApp {
+    font-family: 'Segoe UI', 'Roboto', sans-serif;
+    font-size: 15px;
+    background-color: #f8f9fa;
+}
+</style>
+""", unsafe_allow_html=True)
