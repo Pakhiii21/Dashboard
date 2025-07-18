@@ -7,7 +7,7 @@ st.set_page_config(layout="wide")
 # Page title
 st.markdown("<h2 style='color:#2c3e50;'>📊 WEEKLY DASHBOARD</h2>", unsafe_allow_html=True)
 
-# Upload section
+# Upload section box
 st.markdown("""
 <div style="
     background-color:#e6f0f5;
@@ -21,8 +21,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-
-
 # Upload file
 uploaded_file = st.file_uploader("", type=["xlsx"])
 
@@ -30,26 +28,23 @@ if uploaded_file:
     # Load Excel file and select sheet
     xls = pd.ExcelFile(uploaded_file)
     sheet_name = st.selectbox("📄 Select a sheet to view:", xls.sheet_names)
-    df = pd.read_excel(xls, sheet_name=sheet_name)
-    df = pd.read_excel(xls, sheet_name=selected_sheet, skiprows=2)  # <-- CHANGE THIS NUMBER as needed
 
-    df.fillna("", inplace=True)
+    # ✅ Skip rows above actual header row if needed (e.g. skip title rows)
+    df = pd.read_excel(xls, sheet_name=sheet_name, skiprows=2)  # 👈 Change 2 if needed
 
     # Replace NaN/None with blank
     df.fillna("", inplace=True)
 
     st.markdown(f"### 🔍 Preview of: `{sheet_name}`")
 
-    # Show DataFrame in scrollable container with borders
+    # Show DataFrame with scroll and borders
     st.dataframe(
         df,
         use_container_width=True,
         height=600
-
-
     )
 
-    # Optional: custom CSS to slightly style border and background (won't break anything)
+    # Custom border and header styling
     st.markdown("""
     <style>
     .stDataFrame tbody td {
@@ -61,14 +56,15 @@ if uploaded_file:
     }
     </style>
     """, unsafe_allow_html=True)
-# Hide Streamlit default empty block at bottom
+
+# Hide white block and footer
 st.markdown("""
-    <style>
-    .block-container {
-        padding-bottom: 0rem !important;
-    }
-    footer {
-        visibility: hidden;
-    }
-    </style>
+<style>
+.block-container {
+    padding-bottom: 0rem !important;
+}
+footer {
+    visibility: hidden;
+}
+</style>
 """, unsafe_allow_html=True)
