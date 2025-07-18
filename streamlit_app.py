@@ -31,6 +31,9 @@ if uploaded_file:
     xls = pd.ExcelFile(uploaded_file)
     sheet_name = st.selectbox("📄 Select a sheet to view:", xls.sheet_names)
     df = pd.read_excel(xls, sheet_name=sheet_name)
+    df = pd.read_excel(xls, sheet_name=selected_sheet, skiprows=2)  # <-- CHANGE THIS NUMBER as needed
+
+    df.fillna("", inplace=True)
 
     # Replace NaN/None with blank
     df.fillna("", inplace=True)
