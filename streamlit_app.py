@@ -31,7 +31,7 @@ if uploaded_file:
 
     # Try to read skipping first row (adjust if needed)
 # Fallback
-    try:
+try:
     df = pd.read_excel(xls, sheet_name=sheet_name, header=1)  # Try using row 2 as header
 except Exception as e:
     st.warning(f"⚠️ Could not read using header row 2. Using default headers instead. Error: {e}")
