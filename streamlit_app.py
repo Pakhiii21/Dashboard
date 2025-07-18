@@ -6,7 +6,7 @@ import io
 st.set_page_config(layout="wide")
 
 # Page Title
-st.markdown("<h2 style='color:#2c3e50;'>📊 WEEKLY DASHBOARD</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='color:#0b5394;'>📊 WEEKLY DASHBOARD</h2>", unsafe_allow_html=True)
 
 # Upload section with blue background
 st.markdown("""
