@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from io import BytesIO
 
 # Set wide layout
 st.set_page_config(layout="wide")
@@ -26,72 +25,71 @@ st.markdown("""
 uploaded_file = st.file_uploader("", type=["xlsx"])
 
 if uploaded_file:
-    xls = pd.ExcelFile(uploaded_file)
-    sheet_name = st.selectbox("📄 Select a sheet to view:", xls.sheet_names)
+    try:
+        xls = pd.ExcelFile(uploaded_file)
+        sheet_name = st.selectbox("📄 Select a sheet to view:", xls.sheet_names)
 
-    # Try to read skipping first row (adjust if needed)
-# Fallback
-try:
-    df = pd.read_excel(xls, sheet_name=sheet_name, header=1)  # Try using row 2 as header
-except Exception as e:
-    st.warning(f"⚠️ Could not read using header row 2. Using default headers instead. Error: {e}")
-    df = pd.read_excel(xls, sheet_name=sheet_name)
+        try:
+            df = pd.read_excel(xls, sheet_name=sheet_name, header=1)  # Try to skip first row
+        except Exception as e:
+            st.warning(f"⚠️ Could not read using header row 2. Using default headers instead.")
+            df = pd.read_excel(xls, sheet_name=sheet_name)
 
+        df.fillna("", inplace=True)
 
-    # Replace NaN/None with blanks
-    df.fillna("", inplace=True)
+        # Info section
+        st.markdown(f"🗂️ **File:** `{uploaded_file.name}`  |  📄 **Sheet:** `{sheet_name}`")
+        st.markdown(f"🧮 Rows: **{df.shape[0]}** | Columns: **{df.shape[1]}**")
 
-    # File and sheet info
-    st.markdown(f"🗂️ **File:** `{uploaded_file.name}`  |  📄 **Sheet:** `{sheet_name}`")
-    st.markdown(f"🧮 Rows: **{df.shape[0]}** | Columns: **{df.shape[1]}**")
+        # Search box
+        search = st.text_input("🔍 Search within data:")
+        if search:
+            df = df[df.apply(lambda row: row.astype(str).str.contains(search, case=False).any(), axis=1)]
 
-    # Search box
-    search = st.text_input("🔍 Search within data:")
-    if search:
-        df = df[df.apply(lambda row: row.astype(str).str.contains(search, case=False).any(), axis=1)]
+        # Preview
+        st.markdown(f"### 🔍 Preview of: `{sheet_name}`")
+        st.dataframe(df, use_container_width=True, height=600)
 
-    # Preview
-    st.markdown(f"### 🔍 Preview of: `{sheet_name}`")
-    st.dataframe(df, use_container_width=True, height=600)
+        # Download filtered data
+        @st.cache_data
+        def convert_df(df):
+            from io import BytesIO
+            output = BytesIO()
+            df.to_excel(output, index=False, engine='openpyxl')
+            return output.getvalue()
 
-    # Convert dataframe to downloadable Excel file
-    @st.cache_data
-    def convert_df_to_excel(df):
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False)
-        output.seek(0)
-        return output
+        excel_bytes = convert_df(df)
+        st.download_button(
+            label="📥 Download Filtered Data as Excel",
+            data=excel_bytes,
+            file_name="filtered_dashboard.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
-    excel_bytes = convert_df_to_excel(df)
-    st.download_button(
-        label="📥 Download Filtered Data as Excel",
-        data=excel_bytes,
-        file_name="filtered_dashboard.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+        # Styling
+        st.markdown("""
+        <style>
+        .stDataFrame tbody td {
+            white-space: normal;
+            word-wrap: break-word;
+            border: 1px solid #d3d3d3;
+        }
+        .stDataFrame thead th {
+            background-color: #f0f0f0;
+            border: 1px solid #d3d3d3;
+        }
+        .block-container {
+            padding-bottom: 0rem !important;
+        }
+        footer {
+            visibility: hidden;
+        }
+        body, .stApp {
+            font-family: 'Segoe UI', 'Roboto', sans-serif;
+            font-size: 15px;
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
-    # Custom styling
-    st.markdown("""
-    <style>
-    .stDataFrame tbody td {
-        white-space: normal;
-        word-wrap: break-word;
-        border: 1px solid #d3d3d3;
-    }
-    .stDataFrame thead th {
-        background-color: #f0f0f0;
-        border: 1px solid #d3d3d3;
-    }
-    .block-container {
-        padding-bottom: 0rem !important;
-    }
-    footer {
-        visibility: hidden;
-    }
-    body, .stApp {
-        font-family: 'Segoe UI', 'Roboto', sans-serif;
-        font-size: 15px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    except Exception as e:
+        st.error(f"❌ Error reading the file: {e}")
