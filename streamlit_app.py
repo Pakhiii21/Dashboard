@@ -1,159 +1,85 @@
-import streamlit as st
 import pandas as pd
-import io
 import plotly.express as px
 
-# Set wide layout
-st.set_page_config(layout="wide")
+# Load Excel file
+file_path = "Weekly update 1.xlsx"  # <-- Change this if filename differs
+xls = pd.ExcelFile(file_path)
 
-# Page Title
-st.markdown("<h2 style='color:#0b5394;'>📊 WEEKLY DASHBOARD</h2>", unsafe_allow_html=True)
+# Step 1: Read sheets with raw headers
+results_raw = pd.read_excel(xls, sheet_name="RWF RESULTS", header=None, skiprows=5)
+trend_raw = pd.read_excel(xls, sheet_name="RWF TREND", header=None, skiprows=2)
 
-# Upload section
-st.markdown("""
-<div style="
-    background-color:#e6f0f5;
-    padding:16px;
-    border-radius:10px;
-    border:1px solid #d0dce0;
-    color:#1c1c1c;
-">
-    <h4 style="margin-bottom:8px;">Upload your Excel file</h4>
-    <p style="margin:0;">Supported format: <strong>.xlsx</strong> | Max size: 200MB</p>
-</div>
-""", unsafe_allow_html=True)
+# Step 2: Use first data row as header
+results_raw.columns = results_raw.iloc[0]
+results_df = results_raw.drop(index=0).reset_index(drop=True)
 
-# Upload Excel file
-uploaded_file = st.file_uploader("", type=["xlsx"])
+trend_raw.columns = trend_raw.iloc[0]
+trend_df = trend_raw.drop(index=0).reset_index(drop=True)
 
-if uploaded_file:
-    try:
-        xls = pd.ExcelFile(uploaded_file)
-        sheet_name = st.selectbox("Select a sheet to view:", xls.sheet_names)
+# Step 3: Clean up and rename columns
+results_df.columns = [str(col).strip() for col in results_df.columns]
+trend_df.columns = [str(col).strip() for col in trend_df.columns]
 
-        try:
-            df = pd.read_excel(xls, sheet_name=sheet_name, skiprows=4 if sheet_name == "RWF RESULTS" else 0)
-        except Exception as e:
-            st.error(f"Error reading sheet: {e}")
-            st.stop()
+# Step 4: Rename first column to 'Vendor'
+if "Vendor" not in trend_df.columns:
+    trend_df.rename(columns={trend_df.columns[0]: "Vendor"}, inplace=True)
 
-        df.fillna("", inplace=True)
+if "Vendor" not in results_df.columns:
+    results_df.rename(columns={results_df.columns[0]: "Vendor"}, inplace=True)
 
-        st.markdown(f"**File:** `{uploaded_file.name}`  |  **Sheet:** `{sheet_name}`")
-        st.markdown(f"Rows: **{df.shape[0]}** | Columns: **{df.shape[1]}**")
+# Step 5: Define parameters to compare
+parameters = ['Moisture %', 'Protein %', 'Total Ash %', 'Peak Time', 'Stability']
+mapped_trend_cols = {}
+for col in trend_df.columns:
+    for param in parameters:
+        if param.lower() in col.lower():
+            mapped_trend_cols[param] = col
 
-        # Auto-detect relevant columns
-        col_map = {}
-        for col in df.columns:
-            col_str = str(col).lower()
-            if "supplier" in col_str or "vendor" in col_str:
-                col_map['vendor'] = col
-            if "moisture" in col_str:
-                col_map['moisture'] = col
-            if "protein" in col_str:
-                col_map['protein'] = col
-            if "ash" in col_str:
-                col_map['ash'] = col
-            if "drc" in col_str:
-                col_map['drc'] = col
-            if "tps" in col_str:
-                col_map['tps'] = col
+# Step 6: Merge average values with each vendor observation
+results_df['Vendor'] = results_df['Vendor'].astype(str).str.strip()
+trend_df['Vendor'] = trend_df['Vendor'].astype(str).str.strip()
 
-        st.write("Detected columns:", col_map)
+# Convert numeric cols
+for param in parameters:
+    if param in results_df.columns:
+        results_df[param] = pd.to_numeric(results_df[param], errors='coerce')
 
-        for key in ['moisture', 'protein', 'ash', 'drc', 'tps']:
-            if key in col_map:
-                df[col_map[key]] = pd.to_numeric(df[col_map[key]], errors="coerce")
+    if param in mapped_trend_cols:
+        trend_df[mapped_trend_cols[param]] = pd.to_numeric(trend_df[mapped_trend_cols[param]], errors='coerce')
 
-        # Apply compliance rules with targets
-        if 'moisture' in col_map:
-            df["Moisture OK"] = df[col_map['moisture']].between(3, 10)
-            df["Moisture Target"] = 7
-        if 'protein' in col_map:
-            df["Protein OK"] = df[col_map['protein']].between(80, 93)
-            df["Protein Target"] = 85
-        if 'ash' in col_map:
-            df["Ash OK"] = df[col_map['ash']].between(0.8, 2)
-            df["Ash Target"] = 1.2
-        if 'drc' in col_map:
-            df["DRC OK"] = df[col_map['drc']] >= 38
-            df["DRC Target"] = 38
-        if 'tps' in col_map:
-            df["TPS OK"] = df[col_map['tps']] >= 38
-            df["TPS Target"] = 38
+# Merge average (target) values
+merged_df = pd.merge(results_df, trend_df[['Vendor'] + list(mapped_trend_cols.values())], on='Vendor', how='left')
 
-        check_cols = [col for col in ["Moisture OK", "Protein OK", "Ash OK", "DRC OK", "TPS OK"] if col in df.columns]
-        if check_cols:
-            df["All OK"] = df[check_cols].all(axis=1)
+# Step 7: Check compliance and report
+non_compliant = []
 
-        # Highlight non-compliant vendors
-        if 'vendor' in col_map:
-            st.markdown("### Vendors Not Meeting All Criteria")
-            non_compliant = df[df.get("All OK") == False]
-            if not non_compliant.empty:
-                st.dataframe(non_compliant[[col_map['vendor']] + check_cols], use_container_width=True)
-                bad_vendors = non_compliant[col_map['vendor']].unique().tolist()
-                st.warning(f"The following vendors have one or more non-compliant records: {', '.join(map(str, bad_vendors))}")
-            else:
-                st.success("All vendors meet the defined quality parameters.")
+for param in parameters:
+    observed_col = param
+    expected_col = mapped_trend_cols.get(param)
+    if observed_col in merged_df.columns and expected_col:
+        merged_df[f"{param} OK"] = abs(merged_df[observed_col] - merged_df[expected_col]) <= 1.0  # tolerance
+        non_ok = merged_df[~merged_df[f"{param} OK"]]]
+        if not non_ok.empty:
+            non_compliant.append((param, non_ok['Vendor'].unique().tolist()))
 
-        # Plot graphs for all parameters vs target
-        st.markdown("### Parameter Distributions vs Target")
-        for key in ['moisture', 'protein', 'ash', 'drc', 'tps']:
-            if key in col_map:
-                target_value = df[f"{key.upper()} Target"].iloc[0] if f"{key.upper()} Target" in df.columns else None
-                fig = px.box(df, y=col_map[key], points="all", title=f"{key.upper()} Distribution")
-                if target_value:
-                    fig.add_hline(y=target_value, line_dash="dash", line_color="red", annotation_text=f"Target = {target_value}", annotation_position="top right")
-                st.plotly_chart(fig, use_container_width=True)
+# Show non-compliance report
+print("🚨 Non-Compliant Vendors:")
+for param, vendors in non_compliant:
+    print(f"- {param}: {', '.join(vendors)}")
 
-        # Search
-        search = st.text_input("Search within data:")
-        if search:
-            df = df[df.apply(lambda row: row.astype(str).str.contains(search, case=False).any(), axis=1)]
+# Step 8: Plot observed vs expected
+import plotly.graph_objects as go
 
-        st.markdown(f"### Preview of: `{sheet_name}`")
-        st.dataframe(df, use_container_width=True, height=600)
-
-        @st.cache_data
-        def convert_df(df):
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False)
-            return output.getvalue()
-
-        excel_bytes = convert_df(df)
-        st.download_button(
-            label="Download Filtered Data as Excel",
-            data=excel_bytes,
-            file_name="filtered_dashboard.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+for param in parameters:
+    observed_col = param
+    expected_col = mapped_trend_cols.get(param)
+    if observed_col in merged_df.columns and expected_col:
+        fig = px.scatter(
+            merged_df,
+            x='Vendor',
+            y=[observed_col, expected_col],
+            title=f"{param} - Observed vs Expected",
+            labels={"value": param, "variable": "Type"},
         )
-
-    except Exception as e:
-        st.error(f"Unable to read file: {e}")
-
-# Styling
-st.markdown("""
-<style>
-.stDataFrame tbody td {
-    white-space: normal;
-    word-wrap: break-word;
-    border: 1px solid #d3d3d3;
-}
-.stDataFrame thead th {
-    background-color: #f0f0f0;
-    border: 1px solid #d3d3d3;
-}
-.block-container {
-    padding-bottom: 0rem !important;
-}
-footer {
-    visibility: hidden;
-}
-body, .stApp {
-    font-family: 'Segoe UI', 'Roboto', sans-serif;
-    font-size: 15px;
-}
-</style>
-""", unsafe_allow_html=True)
+        fig.update_layout(xaxis_tickangle=-45)
+        fig.show()
