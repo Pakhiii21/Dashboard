@@ -30,7 +30,7 @@ if uploaded_file:
     sheet_name = st.selectbox("📄 Select a sheet to view:", xls.sheet_names)
 
     # Try to read skipping first row (adjust if needed)
-   try:
+try:
     df = pd.read_excel(xls, sheet_name=sheet_name, header=1)  # Corrects column headers
 except:
     df = pd.read_excel(xls, sheet_name=sheet_name)  # Fallback
