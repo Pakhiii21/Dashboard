@@ -52,7 +52,7 @@ if uploaded_file:
 
     # Download filtered data
     @st.cache_data
-    from io import BytesIO
+   from io import BytesIO
 
 @st.cache_data
 def convert_df(df):
@@ -61,15 +61,15 @@ def convert_df(df):
         df.to_excel(writer, index=False)
     return output.getvalue()
 
+excel_bytes = convert_df(df)
 
+st.download_button(
+    label="📥 Download Filtered Data as Excel",
+    data=excel_bytes,
+    file_name="filtered_dashboard.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
-    excel_bytes = convert_df(df)
-    st.download_button(
-        label="📥 Download Filtered Data as Excel",
-        data=excel_bytes,
-        file_name="filtered_dashboard.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
 
     # Custom styling
     st.markdown("""
