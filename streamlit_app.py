@@ -52,7 +52,7 @@ if uploaded_file:
 
     # Download filtered data
     @st.cache_data
-   from io import BytesIO
+    from io import BytesIO
 
 @st.cache_data
 def convert_df(df):
