@@ -65,17 +65,22 @@ if uploaded_file:
             if key in col_map:
                 df[col_map[key]] = pd.to_numeric(df[col_map[key]], errors="coerce")
 
-        # Apply compliance rules
+        # Apply compliance rules with targets
         if 'moisture' in col_map:
             df["Moisture OK"] = df[col_map['moisture']].between(3, 10)
+            df["Moisture Target"] = 7
         if 'protein' in col_map:
             df["Protein OK"] = df[col_map['protein']].between(80, 93)
+            df["Protein Target"] = 85
         if 'ash' in col_map:
             df["Ash OK"] = df[col_map['ash']].between(0.8, 2)
+            df["Ash Target"] = 1.2
         if 'drc' in col_map:
             df["DRC OK"] = df[col_map['drc']] >= 38
+            df["DRC Target"] = 38
         if 'tps' in col_map:
             df["TPS OK"] = df[col_map['tps']] >= 38
+            df["TPS Target"] = 38
 
         check_cols = [col for col in ["Moisture OK", "Protein OK", "Ash OK", "DRC OK", "TPS OK"] if col in df.columns]
         if check_cols:
@@ -92,11 +97,14 @@ if uploaded_file:
             else:
                 st.success("All vendors meet the defined quality parameters.")
 
-        # Plot graphs for all parameters
-        st.markdown("### Parameter Distributions")
+        # Plot graphs for all parameters vs target
+        st.markdown("### Parameter Distributions vs Target")
         for key in ['moisture', 'protein', 'ash', 'drc', 'tps']:
             if key in col_map:
+                target_value = df[f"{key.upper()} Target"].iloc[0] if f"{key.upper()} Target" in df.columns else None
                 fig = px.box(df, y=col_map[key], points="all", title=f"{key.upper()} Distribution")
+                if target_value:
+                    fig.add_hline(y=target_value, line_dash="dash", line_color="red", annotation_text=f"Target = {target_value}", annotation_position="top right")
                 st.plotly_chart(fig, use_container_width=True)
 
         # Search
