@@ -42,6 +42,9 @@ if uploaded_file:
         df,
         use_container_width=True,
         height=600
+rows_to_skip = st.number_input("Rows to skip (before header):", 0, 10, 2)
+df = pd.read_excel(xls, sheet_name=selected_sheet, skiprows=rows_to_skip)
+
     )
 
     # Optional: custom CSS to slightly style border and background (won't break anything)
