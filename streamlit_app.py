@@ -52,8 +52,16 @@ if uploaded_file:
 
     # Download filtered data
     @st.cache_data
-    def convert_df(df):
-        return df.to_excel(index=False, engine='openpyxl')
+    from io import BytesIO
+
+@st.cache_data
+def convert_df(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False)
+    return output.getvalue()
+
+
 
     excel_bytes = convert_df(df)
     st.download_button(
