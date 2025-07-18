@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
 
-# Set wide layout
+# Set page to wide layout
 st.set_page_config(layout="wide")
 
-st.markdown("<h2 style='color:#2c3e50;'>📊 Excel Dashboard Viewer</h2>", unsafe_allow_html=True)
+# Page title
+st.markdown("<h2 style='color:#2c3e50;'>📊 WEEKLY DASHBOARD</h2>", unsafe_allow_html=True)
 
-# Upload prompt
+# Upload section
 st.markdown("""
 <div style="background-color:#f9f9f9;padding:15px;border-radius:10px">
 <h4>📤 Upload your Excel file</h4>
@@ -14,28 +15,47 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Upload Excel file
+# Upload file
 uploaded_file = st.file_uploader("", type=["xlsx"])
 
 if uploaded_file:
+    # Load Excel file and select sheet
     xls = pd.ExcelFile(uploaded_file)
     sheet_name = st.selectbox("📄 Select a sheet to view:", xls.sheet_names)
     df = pd.read_excel(xls, sheet_name=sheet_name)
 
-    # Replace NaN with blank
+    # Replace NaN/None with blank
     df.fillna("", inplace=True)
 
     st.markdown(f"### 🔍 Preview of: `{sheet_name}`")
 
-    # Styled dataframe display
+    # Show DataFrame in scrollable container with borders
     st.dataframe(
-        df.style.set_properties(**{
-            'background-color': '#ffffff',
-            'border-color': '#cccccc',
-            'border-style': 'solid',
-            'border-width': '1px',
-            'color': '#000000'
-        }),
+        df,
         use_container_width=True,
         height=600
     )
+
+    # Optional: custom CSS to slightly style border and background (won't break anything)
+    st.markdown("""
+    <style>
+    .stDataFrame tbody td {
+        border: 1px solid #d3d3d3;
+    }
+    .stDataFrame thead th {
+        background-color: #f0f0f0;
+        border: 1px solid #d3d3d3;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+# Hide Streamlit default empty block at bottom
+st.markdown("""
+    <style>
+    .block-container {
+        padding-bottom: 0rem !important;
+    }
+    footer {
+        visibility: hidden;
+    }
+    </style>
+""", unsafe_allow_html=True)
