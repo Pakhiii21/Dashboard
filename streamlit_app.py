@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import io
 
 # Set wide layout
 st.set_page_config(layout="wide")
@@ -7,7 +8,7 @@ st.set_page_config(layout="wide")
 # Page Title
 st.markdown("<h2 style='color:#2c3e50;'>📊 WEEKLY DASHBOARD</h2>", unsafe_allow_html=True)
 
-# Upload section with soft blue background
+# Upload section with blue background
 st.markdown("""
 <div style="
     background-color:#e6f0f5;
@@ -29,7 +30,7 @@ if uploaded_file:
         xls = pd.ExcelFile(uploaded_file)
         sheet_name = st.selectbox("📄 Select a sheet to view:", xls.sheet_names)
 
-        # Load sheet
+        # Read data
         try:
             df = pd.read_excel(xls, sheet_name=sheet_name)
         except Exception as e:
@@ -46,13 +47,13 @@ if uploaded_file:
         if search:
             df = df[df.apply(lambda row: row.astype(str).str.contains(search, case=False).any(), axis=1)]
 
+        # Table preview
         st.markdown(f"### 🔍 Preview of: `{sheet_name}`")
         st.dataframe(df, use_container_width=True, height=600)
 
-        # Download
+        # Download filtered
         @st.cache_data
         def convert_df(df):
-            import io
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
                 df.to_excel(writer, index=False)
@@ -90,7 +91,6 @@ footer {
 body, .stApp {
     font-family: 'Segoe UI', 'Roboto', sans-serif;
     font-size: 15px;
-    background-color: white;
 }
 </style>
 """, unsafe_allow_html=True)
