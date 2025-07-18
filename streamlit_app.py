@@ -3,7 +3,10 @@ import plotly.express as px
 
 # Load Excel file
 file_path = "Weekly update 1.xlsx"  # <-- Change this if filename differs
-xls = pd.ExcelFile(file_path)
+uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
+if uploaded_file is not None:
+    xls = pd.ExcelFile(uploaded_file)
+
 
 # Step 1: Read sheets with raw headers
 results_raw = pd.read_excel(xls, sheet_name="RWF RESULTS", header=None, skiprows=5)
