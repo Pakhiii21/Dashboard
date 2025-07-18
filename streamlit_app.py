@@ -7,7 +7,7 @@ import plotly.express as px
 st.set_page_config(layout="wide")
 
 # Page Title
-st.markdown("<h2 style='color:#0b5394;'>WEEKLY DASHBOARD</h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='color:#0b5394;'>📊 WEEKLY DASHBOARD</h2>", unsafe_allow_html=True)
 
 # Upload section
 st.markdown("""
@@ -59,30 +59,37 @@ if uploaded_file:
             if "tps" in col_str:
                 col_map['tps'] = col
 
+        # Show all available columns (for debugging)
+        st.write("Detected columns:", col_map)
+
         for key in ['moisture', 'protein', 'ash', 'drc', 'tps']:
             if key in col_map:
                 df[col_map[key]] = pd.to_numeric(df[col_map[key]], errors="coerce")
 
         # Apply compliance rules
-        df["Moisture OK"] = df[col_map['moisture']].between(3, 10)
-        df["Protein OK"] = df[col_map['protein']].between(80, 93)
-        df["Ash OK"] = df[col_map['ash']].between(0.8, 2)
+        if 'moisture' in col_map:
+            df["Moisture OK"] = df[col_map['moisture']].between(3, 10)
+        if 'protein' in col_map:
+            df["Protein OK"] = df[col_map['protein']].between(80, 93)
+        if 'ash' in col_map:
+            df["Ash OK"] = df[col_map['ash']].between(0.8, 2)
         if 'drc' in col_map:
             df["DRC OK"] = df[col_map['drc']] >= 38
         if 'tps' in col_map:
             df["TPS OK"] = df[col_map['tps']] >= 38
 
         check_cols = [col for col in ["Moisture OK", "Protein OK", "Ash OK", "DRC OK", "TPS OK"] if col in df.columns]
-        df["All OK"] = df[check_cols].all(axis=1)
+        if check_cols:
+            df["All OK"] = df[check_cols].all(axis=1)
 
         # Highlight non-compliant vendors
         if 'vendor' in col_map:
             st.markdown("### Vendors Not Meeting All Criteria")
-            non_compliant = df[df["All OK"] == False]
+            non_compliant = df[df.get("All OK") == False]
             if not non_compliant.empty:
                 st.dataframe(non_compliant[[col_map['vendor']] + check_cols], use_container_width=True)
                 bad_vendors = non_compliant[col_map['vendor']].unique().tolist()
-                st.warning(f"The following vendors have one or more non-compliant records: {', '.join(bad_vendors)}")
+                st.warning(f"The following vendors have one or more non-compliant records: {', '.join(map(str, bad_vendors))}")
             else:
                 st.success("All vendors meet the defined quality parameters.")
 
