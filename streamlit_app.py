@@ -58,7 +58,8 @@ for param in parameters:
     expected_col = mapped_trend_cols.get(param)
     if observed_col in merged_df.columns and expected_col:
         merged_df[f"{param} OK"] = abs(merged_df[observed_col] - merged_df[expected_col]) <= 1.0  # tolerance
-        non_ok = merged_df[~merged_df[f"{param} OK"]]]
+        non_ok = merged_df[~merged_df[f"{param} OK"]]
+
         if not non_ok.empty:
             non_compliant.append((param, non_ok['Vendor'].unique().tolist()))
 
