@@ -101,19 +101,7 @@ if uploaded_file:
                 st.dataframe(filtered, use_container_width=True)
 
         except Exception as e:
-st.error(f"❌ Error processing sheet '{sheet}': {e}")
-            heatmap_data = outliers.copy()
-heatmap_data = heatmap_data[["Supplier", "Out of Spec"]]
-heatmap_data = heatmap_data.assign(Param=heatmap_data["Out of Spec"].str.split(", ")).explode("Param")
-heatmap = heatmap_data.groupby(["Supplier", "Param"]).size().reset_index(name="Count")
 
-chart = alt.Chart(heatmap).mark_rect().encode(
-    x=alt.X("Param", title="Parameter"),
-    y=alt.Y("Supplier", title="Supplier"),
-    color=alt.Color("Count", scale=alt.Scale(scheme='reds')),
-    tooltip=["Supplier", "Param", "Count"]
-).properties(title="Violation Heatmap", height=400)
-st.altair_chart(chart, use_container_width=True)
 
 
     st.markdown("---")
