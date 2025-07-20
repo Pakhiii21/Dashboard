@@ -1,80 +1,62 @@
-import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import io
+import seaborn as sns
 
-st.set_page_config(layout="wide")
+# Read Excel file
+file_path = 'your_file.xlsx'
+sheet_name = 'RWF RESULTS'
+df = pd.read_excel(file_path, sheet_name=sheet_name, skiprows=4)
 
-st.markdown("<h1 style='text-align: center; color: #2c3e50;'>📊 Weekly Analysis Dashboard</h1>", unsafe_allow_html=True)
+# Define standard value ranges
+standards = {
+    'Moisture': (8, 14),
+    'Alcoholic Acidity': (0.01, 0.12),
+    'Dry Gluten': (10.5, 12),
+    'Gluten Index(%)': (90, 100),
+    'Total Ash %': (0, 0.56),
+    'W.A.P': (60.5, 65),
+    'Peak Time': (6, 8),
+    'Stability': (12, 18),
+    'MTI': (20, 40)
+}
 
-uploaded_file = st.file_uploader("📂 Upload Excel File", type=["xlsx"])
+# Rename columns for easier handling
+df.columns = df.columns.str.strip()
 
-if uploaded_file:
-    # Define parameter thresholds (add more as needed)
-    thresholds = {
-        'Moisture': (11.5, 13.5),
-        'Protein': (9.0, 11.5),
-        'Water Absorption': (58, 63),
-        'Gluten': (8.0, 12.5),
-        'Starch Damage': (5, 9),
-        'TPS': (38, 38),
-        'Pizza Sauce': (38, 100),
-        'MDRC': (38, 100),
-    }
+# Create violation flags
+violation_flags = []
 
-    excel_data = pd.ExcelFile(uploaded_file)
-    violation_summary = []
-    violation_counts = {}
+for index, row in df.iterrows():
+    violations = {}
+    for col, (low, high) in standards.items():
+        if col in row and pd.notna(row[col]):
+            if not (low <= row[col] <= high):
+                violations[col] = row[col]
+    if violations:
+        violations['Supplier'] = row['Supplier']
+        violations['MFD'] = row['MFD']
+        violation_flags.append(violations)
 
-    for sheet in excel_data.sheet_names:
-        st.markdown(f"### 📄 Sheet: `{sheet}`")
-        df = excel_data.parse(sheet)
+# Create a DataFrame of violators
+violation_df = pd.DataFrame(violation_flags)
+violation_df = violation_df[['Supplier', 'MFD'] + [col for col in violation_df.columns if col not in ['Supplier', 'MFD']]]
 
-        if 'Mill Name' not in df.columns:
-            st.warning(f"`Mill Name` column not found in `{sheet}`. Skipping.")
-            continue
+# Save the violations to a new Excel file
+violation_df.to_excel('Violating_Suppliers.xlsx', index=False)
 
-        # Rename to standard name
-        df['Supplier'] = df['Mill Name']
+# Print sample violators
+print("\nSample Violations:")
+print(violation_df.head())
 
-        # Search bar
-        search_term = st.text_input(f"🔍 Search vendor in `{sheet}`", key=f"search_{sheet}")
-        if search_term:
-            df = df[df['Supplier'].astype(str).str.contains(search_term, case=False, na=False)]
+# Plotting example: Moisture by Supplier
+plt.figure(figsize=(12, 6))
+sns.barplot(data=df, x='Supplier', y='Moisture', palette='coolwarm')
+plt.axhline(14, color='red', linestyle='--', label='Max Limit')
+plt.axhline(8, color='green', linestyle='--', label='Min Limit')
+plt.xticks(rotation=90)
+plt.title('Moisture % by Supplier')
+plt.legend()
+plt.tight_layout()
+plt.savefig('Moisture_By_Supplier.png')
+plt.show()
 
-        # Flag violations
-        violations = pd.DataFrame(columns=df.columns)
-        for param, (min_val, max_val) in thresholds.items():
-            if param in df.columns:
-                out_of_range = df[(df[param] < min_val) | (df[param] > max_val)]
-                violations = pd.concat([violations, out_of_range])
-
-                # Count for graph
-                count = out_of_range.shape[0]
-                if count > 0:
-                    violation_counts[param] = violation_counts.get(param, 0) + count
-
-        violations.drop_duplicates(inplace=True)
-
-        if not violations.empty:
-            st.error("⚠️ Some vendors are not meeting standards:")
-            st.dataframe(violations, use_container_width=True)
-
-            vendors = violations['Supplier'].unique().tolist()
-            st.markdown("**🧾 Vendors with Violations:** " + ", ".join(vendors))
-
-            # Download filtered data
-            csv = violations.to_csv(index=False).encode('utf-8')
-            st.download_button("⬇️ Download Violations", csv, f"{sheet}_violations.csv", "text/csv")
-        else:
-            st.success("✅ All values within standard range.")
-
-    # Show bar chart
-    if violation_counts:
-        st.markdown("### 📊 Violation Frequency by Parameter")
-        fig, ax = plt.subplots()
-        ax.bar(violation_counts.keys(), violation_counts.values(), color='tomato')
-        ax.set_ylabel("Violation Count")
-        ax.set_title("Most Frequently Violated Parameters")
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
