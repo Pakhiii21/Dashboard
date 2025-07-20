@@ -1,65 +1,80 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import matplotlib.pyplot as plt
+import io
 
-st.set_page_config(page_title="Weekly Analysis", layout="wide")
+st.set_page_config(layout="wide")
 
-st.markdown("<h1 style='color:#4B8BBE;'>📊 Weekly Analysis Dashboard</h1>", unsafe_allow_html=True)
-uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
+st.markdown("<h1 style='text-align: center; color: #2c3e50;'>📊 Weekly Analysis Dashboard</h1>", unsafe_allow_html=True)
 
-# Define parameter thresholds
-standards = {
-    "DRC": {"min": 38},
-    "TPS": {"min": 38, "max": 50},
-    "Pizza Sauce": {"min": 38}
-}
-
-def check_violations(df, standards):
-    violations = pd.DataFrame()
-    for param, rules in standards.items():
-        if param in df.columns:
-            if "min" in rules:
-                violations = pd.concat([violations, df[df[param] < rules["min"]]])
-            if "max" in rules:
-                violations = pd.concat([violations, df[df[param] > rules["max"]]])
-    return violations.drop_duplicates()
+uploaded_file = st.file_uploader("📂 Upload Excel File", type=["xlsx"])
 
 if uploaded_file:
-    xls = pd.ExcelFile(uploaded_file)
-    sheets = xls.sheet_names
+    # Define parameter thresholds (add more as needed)
+    thresholds = {
+        'Moisture': (11.5, 13.5),
+        'Protein': (9.0, 11.5),
+        'Water Absorption': (58, 63),
+        'Gluten': (8.0, 12.5),
+        'Starch Damage': (5, 9),
+        'TPS': (38, 38),
+        'Pizza Sauce': (38, 100),
+        'MDRC': (38, 100),
+    }
 
-    for sheet in sheets:
-        st.markdown(f"### 📄 Sheet: {sheet}")
-        df = pd.read_excel(uploaded_file, sheet_name=sheet, skiprows=4)
-        df.dropna(axis=1, how='all', inplace=True)
+    excel_data = pd.ExcelFile(uploaded_file)
+    violation_summary = []
+    violation_counts = {}
 
-        if 'Supplier' not in df.columns:
-            st.error("⚠️ 'Supplier' column not found in this sheet!")
+    for sheet in excel_data.sheet_names:
+        st.markdown(f"### 📄 Sheet: `{sheet}`")
+        df = excel_data.parse(sheet)
+
+        if 'Mill Name' not in df.columns:
+            st.warning(f"`Mill Name` column not found in `{sheet}`. Skipping.")
             continue
 
-        # --- Search Feature ---
-        search_term = st.text_input(f"🔍 Search Supplier in {sheet}", key=sheet)
-        filtered_df = df[df['Supplier'].astype(str).str.contains(search_term, case=False, na=False)] if search_term else df
+        # Rename to standard name
+        df['Supplier'] = df['Mill Name']
 
-        # --- Show Violations ---
-        if sheet == 'RWF RESULTS':
-            violated = check_violations(filtered_df, standards)
-            if not violated.empty:
-                st.warning("🚨 Vendors violating standard values:")
-                st.dataframe(violated[['Supplier'] + list(standards.keys())].drop_duplicates())
-                # Optional: Plot violation counts
-                violation_counts = violated['Supplier'].value_counts().reset_index()
-                violation_counts.columns = ['Supplier', 'Violations']
-                fig = px.bar(violation_counts, x='Supplier', y='Violations', color='Violations',
-                             title='Number of Parameter Violations per Supplier')
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.success("✅ No violations found based on defined standards.")
+        # Search bar
+        search_term = st.text_input(f"🔍 Search vendor in `{sheet}`", key=f"search_{sheet}")
+        if search_term:
+            df = df[df['Supplier'].astype(str).str.contains(search_term, case=False, na=False)]
 
-        # --- Display Filtered Data ---
-        st.dataframe(filtered_df)
+        # Flag violations
+        violations = pd.DataFrame(columns=df.columns)
+        for param, (min_val, max_val) in thresholds.items():
+            if param in df.columns:
+                out_of_range = df[(df[param] < min_val) | (df[param] > max_val)]
+                violations = pd.concat([violations, out_of_range])
 
-        # --- Download Filtered Data ---
-        csv = filtered_df.to_csv(index=False).encode('utf-8')
-        st.download_button(f"📥 Download filtered data from {sheet}", csv, f"{sheet}_filtered.csv", "text/csv")
+                # Count for graph
+                count = out_of_range.shape[0]
+                if count > 0:
+                    violation_counts[param] = violation_counts.get(param, 0) + count
 
+        violations.drop_duplicates(inplace=True)
+
+        if not violations.empty:
+            st.error("⚠️ Some vendors are not meeting standards:")
+            st.dataframe(violations, use_container_width=True)
+
+            vendors = violations['Supplier'].unique().tolist()
+            st.markdown("**🧾 Vendors with Violations:** " + ", ".join(vendors))
+
+            # Download filtered data
+            csv = violations.to_csv(index=False).encode('utf-8')
+            st.download_button("⬇️ Download Violations", csv, f"{sheet}_violations.csv", "text/csv")
+        else:
+            st.success("✅ All values within standard range.")
+
+    # Show bar chart
+    if violation_counts:
+        st.markdown("### 📊 Violation Frequency by Parameter")
+        fig, ax = plt.subplots()
+        ax.bar(violation_counts.keys(), violation_counts.values(), color='tomato')
+        ax.set_ylabel("Violation Count")
+        ax.set_title("Most Frequently Violated Parameters")
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
