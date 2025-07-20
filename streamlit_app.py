@@ -63,7 +63,7 @@ if uploaded_file:
                 "20-40 BU": "MTI"
             })
 
-            # Convert types
+            # Convert numeric columns
             for col in limits:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -71,7 +71,7 @@ if uploaded_file:
             # Check limits
             df["Out of Spec"] = df.apply(lambda row: check_limits(row, limits), axis=1)
 
-            # Append sheet name
+            # Add sheet name
             df["Sheet"] = sheet
 
             # Append to master
@@ -80,11 +80,11 @@ if uploaded_file:
             st.error(f"❌ Error processing sheet '{sheet}': {e}")
 
     if not master_df.empty:
-        # Convert date if needed
-        try:
-            master_df["MFD"] = pd.to_datetime(master_df["MFD"])
-        except:
-            pass
+        # ✅ Safely convert MFD to datetime
+        master_df["MFD"] = pd.to_datetime(master_df["MFD"], errors='coerce')
+
+        if master_df["MFD"].isna().any():
+            st.warning("⚠️ Some MFD entries could not be parsed as dates and were excluded.")
 
         # Filters
         with st.sidebar:
@@ -92,14 +92,14 @@ if uploaded_file:
             suppliers = master_df["Supplier"].dropna().unique()
             selected_supplier = st.multiselect("Filter by Supplier", suppliers, default=list(suppliers))
 
-            min_date = pd.to_datetime(master_df["MFD"]).min()
-            max_date = pd.to_datetime(master_df["MFD"]).max()
+            min_date = master_df["MFD"].min()
+            max_date = master_df["MFD"].max()
             selected_date = st.slider("Filter by MFD", min_value=min_date, max_value=max_date,
                                       value=(min_date, max_date))
 
         filtered_df = master_df[
             (master_df["Supplier"].isin(selected_supplier)) &
-            (pd.to_datetime(master_df["MFD"]).between(*selected_date))
+            (master_df["MFD"].between(*selected_date))
         ]
 
         # Highlight violation status
