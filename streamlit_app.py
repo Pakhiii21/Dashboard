@@ -34,6 +34,8 @@ if uploaded_file:
                 issues.append(col)
         return ", ".join(issues) if issues else "OK"
 
+    clean_sheets = []
+
     for sheet in excel.sheet_names:
         try:
             df = excel.parse(sheet, skiprows=4)
@@ -91,10 +93,18 @@ if uploaded_file:
                 st.altair_chart(chart, use_container_width=True)
 
             else:
+                clean_sheets.append((sheet, filtered.copy()))
                 st.success("✅ All samples meet standard parameters.")
-
+                
         except Exception as e:
-            st.error(f"Error processing sheet '{sheet}': {e}")
+            st.error(f"❌ Error processing sheet '{sheet}': {e}")
+
+    # Show clean sheets below all flagged ones
+    if clean_sheets:
+        st.markdown("## ✅ Clean Sheets (No Violations)")
+        for sheet, data in clean_sheets:
+            st.markdown(f"#### Sheet: {sheet}")
+            st.dataframe(data, use_container_width=True)
 
     st.markdown("---")
     st.caption("Lab Quality Flagging Dashboard | Developed by QA Team")
