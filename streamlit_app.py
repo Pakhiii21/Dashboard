@@ -14,19 +14,19 @@ uploaded_file = st.file_uploader("Upload lab Excel file", type=[".xlsx"])
 if uploaded_file:
     excel = pd.ExcelFile(uploaded_file)
 
-    # Define parameter rules (manual ranges)
+    # Define parameter rules
     limits = {
         "Moisture %": (0.08, 0.14),
         "Alcoholic Acidity %": (0.01, 0.12),
         "Dry Gluten %": (0.105, 0.12),
-        "Gluten Index %": (0.90, None),  # Min only
-        "Total Ash %": (None, 0.0056),   # Max only
+        "Gluten Index %": (0.90, None),
+        "Total Ash %": (None, 0.0056),
         "WAP": (0.605, 0.65),
         "Peak Time": (6, 8),
         "Stability": (12, 18),
         "MTI": (20, 40),
-        "TPS": (38, 100),  # Example range for Pizza Sauce TPS
-        "DRC": (38, None)   # Min only
+        "TPS": (38, 100),
+        "DRC": (38, None)
     }
 
     def check_limits(row, limits):
@@ -41,7 +41,6 @@ if uploaded_file:
                 issues.append(col)
         return ", ".join(issues) if issues else "OK"
 
-    # Parse sheets and show flagged data
     for sheet in excel.sheet_names:
         try:
             df = excel.parse(sheet, skiprows=4)
@@ -66,23 +65,20 @@ if uploaded_file:
 
             df["Out of Spec"] = df.apply(lambda row: check_limits(row, limits), axis=1)
 
-            # Filter
             st.markdown(f"### 📄 Sheet: {sheet}")
             search_supplier = st.text_input(f"🔍 Search Supplier in {sheet}", "")
-            filtered = df[df["Supplier"].str.contains(search_supplier, case=False, na=False)]
+            filtered = df[df["Supplier"].astype(str).str.contains(search_supplier, case=False, na=False)]
             outliers = filtered[filtered["Out of Spec"] != "OK"]
 
             if not outliers.empty:
                 st.warning(f"🚨 {len(outliers)} samples have parameter violations.")
                 st.dataframe(outliers, use_container_width=True)
 
-                # Show vendor names with violations
-                violating_vendors = outliers["Supplier"].unique()
+                violating_vendors = outliers["Supplier"].dropna().unique()
                 st.markdown("#### 🚩 Vendors with Violations:")
                 for vendor in violating_vendors:
                     st.markdown(f"- {vendor}")
 
-                # Download filtered data
                 csv = outliers.to_csv(index=False).encode('utf-8')
                 st.download_button(
                     label="📥 Download Filtered Data as CSV",
@@ -91,7 +87,6 @@ if uploaded_file:
                     mime="text/csv"
                 )
 
-                # Optional: Parameter violation frequency chart
                 violation_counts = outliers["Out of Spec"].str.split(", ").explode().value_counts().reset_index()
                 violation_counts.columns = ["Parameter", "Violations"]
                 st.markdown("#### 📉 Most Frequently Violated Parameters:")
