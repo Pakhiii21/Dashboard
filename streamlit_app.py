@@ -104,5 +104,4 @@ if uploaded_file:
 
 
 
-    st.markdown("---")
-    st.caption("Lab Quality Flagging Dashboard | Developed by QA Team")
+    
