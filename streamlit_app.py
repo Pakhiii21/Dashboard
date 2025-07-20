@@ -1,99 +1,77 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
 
-st.title("Jubilant Lab Weekly Dashboard")
+# Title
+st.markdown("<h2 style='color:#2c3e50;'>🔬 Flour Quality Analysis Dashboard</h2>", unsafe_allow_html=True)
 
-   uploaded_file = st.file_uploader("Upload Excel file", type=["xlsx"])
+# Upload Excel file
+uploaded_file = st.file_uploader("Upload lab Excel file", type=[".xlsx"])
 
-    if uploaded_file is not None:
-      xls = pd.ExcelFile(uploaded_file)
-    
-    # Start your logic here
-    results_raw = pd.read_excel(xls, sheet_name="RWF RESULTS", header=None, skiprows=5)
-    trend_raw = pd.read_excel(xls, sheet_name="RWF TREND", header=None, skiprows=1)
-    
-    # Continue with your data processing...
+if uploaded_file:
+    excel = pd.ExcelFile(uploaded_file)
 
+    # Define parameter rules (manual ranges)
+    limits = {
+        "Moisture %": (0.08, 0.14),
+        "Alcoholic Acidity %": (0.01, 0.12),
+        "Dry Gluten %": (0.105, 0.12),
+        "Gluten Index %": (0.90, None),  # Min only
+        "Total Ash %": (None, 0.0056),   # Max only
+        "WAP": (0.605, 0.65),
+        "Peak Time": (6, 8),
+        "Stability": (12, 18),
+        "MTI": (20, 40),
+        "TPS": (38, 100),  # Example range for Pizza Sauce TPS
+        "DRC": (38, None)   # Min only
+    }
 
-# Step 1: Read sheets with raw headers
-results_raw = pd.read_excel(xls, sheet_name="RWF RESULTS", header=None, skiprows=5)
-trend_raw = pd.read_excel(xls, sheet_name="RWF TREND", header=None, skiprows=2)
+    def check_limits(row, limits):
+        issues = []
+        for col, (low, high) in limits.items():
+            if col not in row:
+                continue
+            val = row[col]
+            if pd.isna(val):
+                continue
+            if (low is not None and val < low) or (high is not None and val > high):
+                issues.append(col)
+        return ", ".join(issues) if issues else "OK"
 
-# Step 2: Use first data row as header
-results_raw.columns = results_raw.iloc[0]
-results_df = results_raw.drop(index=0).reset_index(drop=True)
+    # Parse sheets and show flagged data
+    for sheet in excel.sheet_names:
+        try:
+            df = excel.parse(sheet, skiprows=4)
+            df.columns = df.columns[:2].tolist() + [str(c) for c in df.columns[2:]]
+            df = df.rename(columns={
+                df.columns[0]: "Supplier",
+                df.columns[1]: "MFD",
+                "8% to 14%": "Moisture %",
+                "0.01 - 0.12 %": "Alcoholic Acidity %",
+                "10.5 % to 12%": "Dry Gluten %",
+                "Min. 90%": "Gluten Index %",
+                "Max 0.56%": "Total Ash %",
+                "Min 60.5%-65%": "WAP",
+                "6-8 minutes": "Peak Time",
+                "12-18 minutes": "Stability",
+                "20-40 BU": "MTI"
+            })
 
-trend_raw.columns = trend_raw.iloc[0]
-trend_df = trend_raw.drop(index=0).reset_index(drop=True)
+            for col in df.columns:
+                if col in limits:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
 
-# Step 3: Clean up and rename columns
-results_df.columns = [str(col).strip() for col in results_df.columns]
-trend_df.columns = [str(col).strip() for col in trend_df.columns]
+            df["Out of Spec"] = df.apply(lambda row: check_limits(row, limits), axis=1)
 
-# Step 4: Rename first column to 'Vendor'
-if "Vendor" not in trend_df.columns:
-    trend_df.rename(columns={trend_df.columns[0]: "Vendor"}, inplace=True)
+            outliers = df[df["Out of Spec"] != "OK"]
 
-if "Vendor" not in results_df.columns:
-    results_df.rename(columns={results_df.columns[0]: "Vendor"}, inplace=True)
+            st.markdown(f"### 📄 Sheet: {sheet}")
+            if not outliers.empty:
+                st.warning(f"🚨 {len(outliers)} samples have parameter violations.")
+                st.dataframe(outliers)
+            else:
+                st.success("✅ All samples meet standard parameters.")
+        except Exception as e:
+            st.error(f"Error processing sheet '{sheet}': {e}")
 
-# Step 5: Define parameters to compare
-parameters = ['Moisture %', 'Protein %', 'Total Ash %', 'Peak Time', 'Stability']
-mapped_trend_cols = {}
-for col in trend_df.columns:
-    for param in parameters:
-        if param.lower() in col.lower():
-            mapped_trend_cols[param] = col
-
-# Step 6: Merge average values with each vendor observation
-results_df['Vendor'] = results_df['Vendor'].astype(str).str.strip()
-trend_df['Vendor'] = trend_df['Vendor'].astype(str).str.strip()
-
-# Convert numeric cols
-for param in parameters:
-    if param in results_df.columns:
-        results_df[param] = pd.to_numeric(results_df[param], errors='coerce')
-
-    if param in mapped_trend_cols:
-        trend_df[mapped_trend_cols[param]] = pd.to_numeric(trend_df[mapped_trend_cols[param]], errors='coerce')
-
-# Merge average (target) values
-merged_df = pd.merge(results_df, trend_df[['Vendor'] + list(mapped_trend_cols.values())], on='Vendor', how='left')
-
-# Step 7: Check compliance and report
-non_compliant = []
-
-for param in parameters:
-    observed_col = param
-    expected_col = mapped_trend_cols.get(param)
-    if observed_col in merged_df.columns and expected_col:
-        merged_df[f"{param} OK"] = abs(merged_df[observed_col] - merged_df[expected_col]) <= 1.0  # tolerance
-        non_ok = merged_df[~merged_df[f"{param} OK"]]
-
-        if not non_ok.empty:
-            non_compliant.append((param, non_ok['Vendor'].unique().tolist()))
-
-# Show non-compliance report
-print("🚨 Non-Compliant Vendors:")
-for param, vendors in non_compliant:
-    print(f"- {param}: {', '.join(vendors)}")
-
-# Step 8: Plot observed vs expected
-import plotly.graph_objects as go
-
-for param in parameters:
-    observed_col = param
-    expected_col = mapped_trend_cols.get(param)
-    if observed_col in merged_df.columns and expected_col:
-        fig = px.scatter(
-            merged_df,
-            x='Vendor',
-            y=[observed_col, expected_col],
-            title=f"{param} - Observed vs Expected",
-            labels={"value": param, "variable": "Type"},
-        )
-        fig.update_layout(xaxis_tickangle=-45)
-        fig.show()
+    st.markdown("---")
+    st.caption("Lab Quality Flagging Dashboard | Developed by QA Team")
