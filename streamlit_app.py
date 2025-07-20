@@ -11,6 +11,13 @@ st.markdown("Upload an Excel file to visualize and flag samples that **violate J
 
 uploaded_file = st.file_uploader("📤 Upload Excel File", type=["xlsx"])
 
+def find_column(columns, keywords):
+    for col in columns:
+        for kw in keywords:
+            if kw in str(col).lower():
+                return col
+    return None
+
 if uploaded_file:
     excel = pd.ExcelFile(uploaded_file)
     sheet_names = excel.sheet_names
@@ -40,14 +47,23 @@ if uploaded_file:
         df.columns = raw_df.iloc[header_row_idx]
         df.dropna(how='all', inplace=True)
 
-        df = df.rename(columns={
-            "Supplier": "Supplier",
-            "MFD": "MFD",
-            "8% to 14%": "Moisture %",
-            "0.01 - 0.12 %": "Alcoholic Acidity %",
-            "Min 60.5%-65%": "WAP",
-            "6-8 minutes": "Peak Time"
-        })
+        # Identify key columns
+        col_supplier = find_column(df.columns, ["supplier", "vendor", "name"])
+        col_mfd = find_column(df.columns, ["mfd", "date", "manufacture"])
+        col_moisture = find_column(df.columns, ["moisture"])
+        col_acidity = find_column(df.columns, ["alcohol", "acidity"])
+        col_wap = find_column(df.columns, ["wap"])
+        col_peak = find_column(df.columns, ["peak", "time"])
+
+        # Rename for consistency
+        rename_map = {}
+        if col_supplier: rename_map[col_supplier] = "Supplier"
+        if col_mfd: rename_map[col_mfd] = "MFD"
+        if col_moisture: rename_map[col_moisture] = "Moisture %"
+        if col_acidity: rename_map[col_acidity] = "Alcoholic Acidity %"
+        if col_wap: rename_map[col_wap] = "WAP"
+        if col_peak: rename_map[col_peak] = "Peak Time"
+        df.rename(columns=rename_map, inplace=True)
 
         for col in PARAM_SPECS:
             if col in df.columns:
@@ -71,11 +87,13 @@ if uploaded_file:
         else:
             flagged_df = pd.DataFrame()
 
-        if not flagged_df.empty:
+        if not flagged_df.empty and "Supplier" in flagged_df.columns:
             all_flagged_rows.append(flagged_df)
             vendor_counts = flagged_df["Supplier"].value_counts().to_dict()
             for vendor, count in vendor_counts.items():
                 summary_dict[vendor] = summary_dict.get(vendor, 0) + count
+        else:
+            st.info(f"ℹ️ No violations detected or 'Supplier' column missing in sheet '{sheet}'.")
 
     if all_flagged_rows:
         combined_flagged = pd.concat(all_flagged_rows, ignore_index=True)
@@ -83,12 +101,15 @@ if uploaded_file:
         st.markdown(f"🔔 **{len(combined_flagged)} samples have parameter violations.**")
         st.dataframe(combined_flagged)
 
-        st.markdown("### 🚩 Vendors with Violations:")
-        vendor_summary = pd.DataFrame(list(summary_dict.items()), columns=["Vendor", "Violation Count"])
-        vendor_summary = vendor_summary.sort_values(by="Violation Count", ascending=False)
-        st.dataframe(vendor_summary)
+        if "Supplier" in combined_flagged.columns:
+            st.markdown("### 🚩 Vendors with Violations:")
+            vendor_summary = pd.DataFrame(list(summary_dict.items()), columns=["Vendor", "Violation Count"])
+            vendor_summary = vendor_summary.sort_values(by="Violation Count", ascending=False)
+            st.dataframe(vendor_summary)
+        else:
+            st.warning("⚠️ Could not create vendor summary — 'Supplier' column missing.")
 
-        # 📈 Charts for each parameter
+        # 📊 Charts for each parameter
         st.markdown("### 📊 Violation Charts")
         for col in PARAM_SPECS:
             if col in combined_flagged.columns:
@@ -109,7 +130,8 @@ if uploaded_file:
             output = BytesIO()
             with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
                 df.to_excel(writer, index=False, sheet_name="Flagged Samples")
-                vendor_summary.to_excel(writer, index=False, sheet_name="Vendor Summary")
+                if summary_dict:
+                    vendor_summary.to_excel(writer, index=False, sheet_name="Vendor Summary")
             return output.getvalue()
 
         st.download_button(
@@ -118,7 +140,5 @@ if uploaded_file:
             file_name="Flagged_Parameters_Report.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-
     else:
-        st.success("✅ No violations found in uploaded file.")
-
+        st.success("✅ No violations found or no valid data in any sheet.")
