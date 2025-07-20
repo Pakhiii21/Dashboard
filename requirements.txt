@@ -1,4 +1,1 @@
-streamlit
-pandas
-openpyxl
-plotly
+pip install streamlit pandas altair matplotlib seaborn
