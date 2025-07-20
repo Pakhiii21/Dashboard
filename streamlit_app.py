@@ -1,8 +1,12 @@
 import streamlit as st
 import pandas as pd
+import altair as alt
+
+# Set wide layout
+st.set_page_config(page_title="Weekly Analysis", layout="wide")
 
 # Title
-st.markdown("<h2 style='color:#2c3e50;'>🔬 Flour Quality Analysis Dashboard</h2>", unsafe_allow_html=True)
+st.markdown("<h1 style='color:#2c3e50;'>📊 Weekly Analysis</h1>", unsafe_allow_html=True)
 
 # Upload Excel file
 uploaded_file = st.file_uploader("Upload lab Excel file", type=[".xlsx"])
@@ -62,12 +66,42 @@ if uploaded_file:
 
             df["Out of Spec"] = df.apply(lambda row: check_limits(row, limits), axis=1)
 
-            outliers = df[df["Out of Spec"] != "OK"]
-
+            # Filter
             st.markdown(f"### 📄 Sheet: {sheet}")
+            search_supplier = st.text_input(f"🔍 Search Supplier in {sheet}", "")
+            filtered = df[df["Supplier"].str.contains(search_supplier, case=False, na=False)]
+            outliers = filtered[filtered["Out of Spec"] != "OK"]
+
             if not outliers.empty:
                 st.warning(f"🚨 {len(outliers)} samples have parameter violations.")
-                st.dataframe(outliers)
+                st.dataframe(outliers, use_container_width=True)
+
+                # Show vendor names with violations
+                violating_vendors = outliers["Supplier"].unique()
+                st.markdown("#### 🚩 Vendors with Violations:")
+                for vendor in violating_vendors:
+                    st.markdown(f"- {vendor}")
+
+                # Download filtered data
+                csv = outliers.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download Filtered Data as CSV",
+                    data=csv,
+                    file_name=f"flagged_{sheet}.csv",
+                    mime="text/csv"
+                )
+
+                # Optional: Parameter violation frequency chart
+                violation_counts = outliers["Out of Spec"].str.split(", ").explode().value_counts().reset_index()
+                violation_counts.columns = ["Parameter", "Violations"]
+                st.markdown("#### 📉 Most Frequently Violated Parameters:")
+                chart = alt.Chart(violation_counts).mark_bar().encode(
+                    x=alt.X("Parameter", sort="-y"),
+                    y="Violations",
+                    tooltip=["Parameter", "Violations"]
+                ).properties(width=700, height=300)
+                st.altair_chart(chart, use_container_width=True)
+
             else:
                 st.success("✅ All samples meet standard parameters.")
         except Exception as e:
