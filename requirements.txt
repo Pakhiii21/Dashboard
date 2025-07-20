@@ -1,1 +1,5 @@
-pip install streamlit pandas altair matplotlib seaborn
+streamlit
+pandas
+altair
+seaborn
+matplotlib
