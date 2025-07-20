@@ -43,7 +43,13 @@ if uploaded_file:
 
     for sheet in excel.sheet_names:
         try:
-            df = excel.parse(sheet, skiprows=4)
+            # Detect header row dynamically by finding row with max non-empty cells
+            raw_df = excel.parse(sheet, header=None)
+            non_empty_counts = raw_df.notna().sum(axis=1)
+            header_row_index = non_empty_counts.idxmax()
+            df = excel.parse(sheet, skiprows=header_row_index)
+
+            # Rename known columns
             df.columns = df.columns[:2].tolist() + [str(c) for c in df.columns[2:]]
             df = df.rename(columns={
                 df.columns[0]: "Supplier",
@@ -59,12 +65,15 @@ if uploaded_file:
                 "20-40 BU": "MTI"
             })
 
+            # Ensure numeric columns
             for col in df.columns:
                 if col in limits:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
 
+            # Apply limit checker
             df["Out of Spec"] = df.apply(lambda row: check_limits(row, limits), axis=1)
 
+            # Show each sheet
             st.markdown(f"### 📄 Sheet: {sheet}")
             search_supplier = st.text_input(f"🔍 Search Supplier in {sheet}", "")
             filtered = df[df["Supplier"].astype(str).str.contains(search_supplier, case=False, na=False)]
@@ -87,6 +96,7 @@ if uploaded_file:
                     mime="text/csv"
                 )
 
+                # Violation chart
                 violation_counts = outliers["Out of Spec"].str.split(", ").explode().value_counts().reset_index()
                 violation_counts.columns = ["Parameter", "Violations"]
                 st.markdown("#### 📉 Most Frequently Violated Parameters:")
@@ -99,8 +109,9 @@ if uploaded_file:
 
             else:
                 st.success("✅ All samples meet standard parameters.")
+
         except Exception as e:
-            st.error(f"Error processing sheet '{sheet}': {e}")
+            st.error(f"❌ Error processing sheet '{sheet}': {e}")
 
     st.markdown("---")
     st.caption("Lab Quality Flagging Dashboard | Developed by QA Team")
