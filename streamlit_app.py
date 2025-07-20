@@ -1,144 +1,100 @@
-import streamlit as st
+import streamlit as st 
 import pandas as pd
 import altair as alt
-from io import BytesIO
-from datetime import datetime
 
-st.set_page_config(page_title="Lab Parameter Violation Dashboard", layout="wide")
+# Set wide layout
+st.set_page_config(page_title="Weekly Analysis", layout="wide")
 
-st.title("🧪 Lab Quality Parameter Violation Dashboard")
-st.markdown("Upload an Excel file to visualize and flag samples that **violate JFS specs** for selected parameters (1, 2, 6, 7).")
+# Title
+st.markdown("<h1 style='color:#2c3e50;'>📊 Weekly Analysis</h1>", unsafe_allow_html=True)
 
-uploaded_file = st.file_uploader("📤 Upload Excel File", type=["xlsx"])
-
-def find_column(columns, keywords):
-    for col in columns:
-        for kw in keywords:
-            if kw in str(col).lower():
-                return col
-    return None
+# Upload Excel file
+uploaded_file = st.file_uploader("Upload lab Excel file", type=[".xlsx"])
 
 if uploaded_file:
     excel = pd.ExcelFile(uploaded_file)
-    sheet_names = excel.sheet_names
-    st.success(f"Loaded {len(sheet_names)} sheets: {sheet_names}")
 
-    all_flagged_rows = []
-    summary_dict = {}
-
-    PARAM_SPECS = {
-        "Moisture %": (8.0, 14.0),
-        "Alcoholic Acidity %": (0.01, 0.12),
-        "WAP": (60.5, 65.0),
-        "Peak Time": (6.0, 8.0)
+    # Define parameter rules (include only 1, 2, 6, 7)
+    limits = {
+        "Moisture %": (0.08, 0.14),                # 1
+        "Alcoholic Acidity %": (0.01, 0.12),       # 2
+        "WAP": (0.605, 0.65),                      # 6
+        "Peak Time": (6, 8),                       # 7
     }
 
-    for sheet in sheet_names:
-        raw_df = excel.parse(sheet, header=None)
-        raw_df.dropna(how='all', inplace=True)
+    def check_limits(row, limits):
+        issues = []
+        for col, (low, high) in limits.items():
+            if col not in row:
+                continue
+            val = row[col]
+            if pd.isna(val):
+                continue
+            if (low is not None and val < low) or (high is not None and val > high):
+                issues.append(col)
+        return ", ".join(issues) if issues else "OK"
 
-        header_row_idx = raw_df[raw_df.astype(str).apply(lambda row: row.str.contains("Supplier|Moisture", case=False, na=False).any(), axis=1)].index.min()
+    for sheet in excel.sheet_names:
+        try:
+            df = excel.parse(sheet, skiprows=4)
+            df.columns = df.columns[:2].tolist() + [str(c) for c in df.columns[2:]]
+            df = df.rename(columns={
+                df.columns[0]: "Supplier",
+                df.columns[1]: "MFD",
+                "8% to 14%": "Moisture %",
+                "0.01 - 0.12 %": "Alcoholic Acidity %",
+                "Min 60.5%-65%": "WAP",
+                "6-8 minutes": "Peak Time"
+            })
 
-        if pd.isna(header_row_idx):
-            st.warning(f"⚠️ Could not detect valid header in sheet '{sheet}'. Skipping.")
-            continue
+            # Convert relevant columns to numeric
+            for col in limits:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        df = excel.parse(sheet, skiprows=header_row_idx + 1)
-        df.columns = raw_df.iloc[header_row_idx]
-        df.dropna(how='all', inplace=True)
+            df["Out of Spec"] = df.apply(lambda row: check_limits(row, limits), axis=1)
 
-        # Identify key columns
-        col_supplier = find_column(df.columns, ["supplier", "vendor", "name"])
-        col_mfd = find_column(df.columns, ["mfd", "date", "manufacture"])
-        col_moisture = find_column(df.columns, ["moisture"])
-        col_acidity = find_column(df.columns, ["alcohol", "acidity"])
-        col_wap = find_column(df.columns, ["wap"])
-        col_peak = find_column(df.columns, ["peak", "time"])
+            st.markdown(f"### 📄 Sheet: {sheet}")
+            search_supplier = st.text_input(f"🔍 Search Supplier in {sheet}", "")
+            filtered = df[df["Supplier"].astype(str).str.contains(search_supplier, case=False, na=False)]
 
-        # Rename for consistency
-        rename_map = {}
-        if col_supplier: rename_map[col_supplier] = "Supplier"
-        if col_mfd: rename_map[col_mfd] = "MFD"
-        if col_moisture: rename_map[col_moisture] = "Moisture %"
-        if col_acidity: rename_map[col_acidity] = "Alcoholic Acidity %"
-        if col_wap: rename_map[col_wap] = "WAP"
-        if col_peak: rename_map[col_peak] = "Peak Time"
-        df.rename(columns=rename_map, inplace=True)
+            outliers = filtered[filtered["Out of Spec"] != "OK"]
 
-        for col in PARAM_SPECS:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+            if not outliers.empty:
+                st.warning(f"🚨 {len(outliers)} samples have parameter violations.")
+                st.dataframe(outliers, use_container_width=True)
 
-        if "MFD" in df.columns:
-            df["MFD"] = pd.to_datetime(df["MFD"], errors='coerce')
+                violating_vendors = outliers["Supplier"].dropna().unique()
+                st.markdown("#### 🚩 Vendors with Violations:")
+                for vendor in violating_vendors:
+                    st.markdown(f"- {vendor}")
 
-        df["Sheet"] = sheet
-
-        conditions = []
-        for col, (low, high) in PARAM_SPECS.items():
-            if col in df.columns:
-                conditions.append(~df[col].between(low, high))
-
-        if conditions:
-            combined_condition = conditions[0]
-            for cond in conditions[1:]:
-                combined_condition |= cond
-            flagged_df = df[combined_condition]
-        else:
-            flagged_df = pd.DataFrame()
-
-        if not flagged_df.empty and "Supplier" in flagged_df.columns:
-            all_flagged_rows.append(flagged_df)
-            vendor_counts = flagged_df["Supplier"].value_counts().to_dict()
-            for vendor, count in vendor_counts.items():
-                summary_dict[vendor] = summary_dict.get(vendor, 0) + count
-        else:
-            st.info(f"ℹ️ No violations detected or 'Supplier' column missing in sheet '{sheet}'.")
-
-    if all_flagged_rows:
-        combined_flagged = pd.concat(all_flagged_rows, ignore_index=True)
-
-        st.markdown(f"🔔 **{len(combined_flagged)} samples have parameter violations.**")
-        st.dataframe(combined_flagged)
-
-        if "Supplier" in combined_flagged.columns:
-            st.markdown("### 🚩 Vendors with Violations:")
-            vendor_summary = pd.DataFrame(list(summary_dict.items()), columns=["Vendor", "Violation Count"])
-            vendor_summary = vendor_summary.sort_values(by="Violation Count", ascending=False)
-            st.dataframe(vendor_summary)
-        else:
-            st.warning("⚠️ Could not create vendor summary — 'Supplier' column missing.")
-
-        # 📊 Charts for each parameter
-        st.markdown("### 📊 Violation Charts")
-        for col in PARAM_SPECS:
-            if col in combined_flagged.columns:
-                chart = alt.Chart(combined_flagged.dropna(subset=[col])).mark_bar().encode(
-                    x=alt.X('Supplier:N', sort='-y'),
-                    y=alt.Y(f"{col}:Q"),
-                    color=alt.value("orange"),
-                    tooltip=["Supplier", col]
-                ).properties(
-                    width=600,
-                    height=300,
-                    title=f"{col} Violations by Supplier"
+                # Downloadable CSV for violations
+                csv = outliers.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download Flagged Data",
+                    data=csv,
+                    file_name=f"flagged_{sheet}.csv",
+                    mime="text/csv"
                 )
-                st.altair_chart(chart)
 
-        # ⬇️ Download button
-        def to_excel_bytes(df):
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                df.to_excel(writer, index=False, sheet_name="Flagged Samples")
-                if summary_dict:
-                    vendor_summary.to_excel(writer, index=False, sheet_name="Vendor Summary")
-            return output.getvalue()
+                # Bar chart for most violated parameters
+                violation_counts = outliers["Out of Spec"].str.split(", ").explode().value_counts().reset_index()
+                violation_counts.columns = ["Parameter", "Violations"]
 
-        st.download_button(
-            label="⬇️ Download Flagged Data",
-            data=to_excel_bytes(combined_flagged),
-            file_name="Flagged_Parameters_Report.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-    else:
-        st.success("✅ No violations found or no valid data in any sheet.")
+                st.markdown("#### 📉 Frequently Violated Parameters")
+                chart = alt.Chart(violation_counts).mark_bar().encode(
+                    x=alt.X("Parameter", sort="-y"),
+                    y="Violations",
+                    tooltip=["Parameter", "Violations"]
+                ).properties(width=700, height=300)
+                st.altair_chart(chart, use_container_width=True)
+
+            else:
+                st.success("✅ All samples meet standard parameters.")
+
+        except Exception as e:
+            st.error(f"Error processing sheet '{sheet}': {e}")
+
+    st.markdown("---")
+    st.caption("Lab Quality Flagging Dashboard | Developed by QA Team")
