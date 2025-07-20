@@ -92,10 +92,19 @@ if uploaded_file:
             suppliers = master_df["Supplier"].dropna().unique()
             selected_supplier = st.multiselect("Filter by Supplier", suppliers, default=list(suppliers))
 
-            min_date = master_df["MFD"].min()
-            max_date = master_df["MFD"].max()
-            selected_date = st.slider("Filter by MFD", min_value=min_date, max_value=max_date,
-                                      value=(min_date, max_date))
+            valid_dates = master_df["MFD"].dropna()
+
+if valid_dates.empty:
+    st.error("❌ No valid MFD dates found in the file. Please check the date format.")
+    st.stop()
+
+min_date = valid_dates.min()
+max_date = valid_dates.max()
+
+selected_date = st.slider("📅 Filter by MFD", min_value=min_date, max_value=max_date,
+                          value=(min_date, max_date), format="YYYY-MM-DD")
+
+           
 
         filtered_df = master_df[
             (master_df["Supplier"].isin(selected_supplier)) &
