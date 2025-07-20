@@ -1,4 +1,4 @@
-import streamlit as st 
+ import streamlit as st 
 import pandas as pd
 import altair as alt
 
@@ -100,7 +100,7 @@ if uploaded_file:
                 st.success("✅ All samples meet standard parameters.")
                 st.dataframe(filtered, use_container_width=True)
 
-        except Exception as e:
+            except Exception as e:
 
 
 
