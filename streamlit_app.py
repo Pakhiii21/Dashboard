@@ -2,124 +2,77 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 
-# Page setup
-st.set_page_config(page_title="Weekly Lab Analysis", layout="wide")
-st.markdown("<h1 style='color:#2c3e50;'>📊 Weekly Lab Analysis</h1>", unsafe_allow_html=True)
+st.set_page_config(layout="wide")
+st.title("📊 Weekly Lab Quality Dashboard")
 
-# Upload Excel
-uploaded_file = st.file_uploader("📁 Upload lab Excel file", type=[".xlsx"])
-
-# Define parameter rules (parameters 1, 2, 6, 7 only)
-limits = {
-    "Moisture %": (0.08, 0.14),                # 1
-    "Alcoholic Acidity %": (0.01, 0.12),       # 2
-    "WAP": (0.605, 0.65),                      # 6
-    "Peak Time": (6, 8),                       # 7
-}
-
-# Check if value is within spec
-def check_limits(row, limits):
-    issues = []
-    for col, (low, high) in limits.items():
-        if col not in row:
-            continue
-        val = row[col]
-        if pd.isna(val):
-            continue
-        if (low is not None and val < low) or (high is not None and val > high):
-            issues.append(col)
-    return ", ".join(issues) if issues else "OK"
+# File uploader
+uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
 
 if uploaded_file:
-    excel = pd.ExcelFile(uploaded_file)
+    excel_data = pd.ExcelFile(uploaded_file)
+    sheet_names = excel_data.sheet_names
 
-    for sheet in excel.sheet_names:
-        try:
-            df = excel.parse(sheet, skiprows=4)
+    for sheet in sheet_names:
+        if sheet.startswith("~"):
+            continue
 
-            # Fix headers
-            df.columns = df.columns[:2].tolist() + [str(c) for c in df.columns[2:]]
-            df = df.rename(columns={
-                df.columns[0]: "Supplier",
-                df.columns[1]: "MFD",
-                "8% to 14%": "Moisture %",
-                "0.01 - 0.12 %": "Alcoholic Acidity %",
-                "Min 60.5%-65%": "WAP",
-                "6-8 minutes": "Peak Time"
-            })
+        st.subheader(f"📄 Sheet: `{sheet}`")
+        df = pd.read_excel(uploaded_file, sheet_name=sheet)
+        df = df.applymap(lambda x: "" if str(x).lower() == "none" else x)
 
-            # Convert numeric columns
-            for col in limits:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
+        # Extract JFS specs from V Gluten Trend sheet
+        if sheet.lower() == "v gluten trend":
+            specs_row = df.iloc[0]
+            specs_dict = specs_row.dropna().to_dict()
+            continue
 
-            # Flag out-of-spec rows
-            df["Out of Spec"] = df.apply(lambda row: check_limits(row, limits), axis=1)
+        if sheet.lower() != "rwf trend":
+            continue
 
-            # Replace None/NaN with empty string for display
-            df.fillna("", inplace=True)
+        # Filter out spec columns
+        spec_cols = [col for col in df.columns if col in specs_dict]
 
-            st.markdown(f"### 📄 Sheet: `{sheet}`")
-            search_text = st.text_input(f"🔍 Search in `{sheet}`", "")
+        def check_violation(row):
+            for col in spec_cols:
+                try:
+                    value = float(row[col])
+                    target = float(specs_dict[col])
+                    if abs(value - target) > 1e-2:  # Example tolerance
+                        return "Violated"
+                except:
+                    continue
+            return "OK"
 
-            if search_text:
-                mask = df.apply(lambda row: row.astype(str).str.contains(search_text, case=False, na=False).any(), axis=1)
-                filtered = df[mask]
-            else:
-                filtered = df.copy()
+        df["Out of Spec"] = df.apply(check_violation, axis=1)
 
-            # Show filtered full sheet
-            st.dataframe(filtered, use_container_width=True)
+        # Check for violations
+        flagged_df = df[df["Out of Spec"] == "Violated"]
 
-            # Show violations if any
-            outliers = filtered[filtered["Out of Spec"] != "OK"]
+        # Show status message
+        if flagged_df.empty:
+            st.success("✅ All samples meet spec for this sheet.")
+        else:
+            st.warning("⚠️ Some samples are out of spec:")
+            st.dataframe(flagged_df, use_container_width=True)
 
-            if not outliers.empty:
-                st.warning(f"🚨 {len(outliers)} samples have parameter violations.")
-                st.dataframe(outliers, use_container_width=True)
+        # Unified search
+        st.text_input("🔍 Search in `RWF TREND`", key=f"search_{sheet}")
+        st.dataframe(df, use_container_width=True)
 
-                # Vendors with violations
-                violating_vendors = outliers["Supplier"].dropna().unique()
-                st.markdown("#### 🚩 Vendors with Violations:")
-                for vendor in violating_vendors:
-                    st.markdown(f"- {vendor}")
+        # Donut chart for violations
+        if not flagged_df.empty:
+            for param in spec_cols:
+                df_param = df[[param, "Out of Spec"]].copy()
+                df_param["Status"] = df_param["Out of Spec"].apply(lambda x: "Violated" if x == "Violated" else "OK")
+                chart_data = df_param["Status"].value_counts().reset_index()
+                chart_data.columns = ["Status", "Count"]
 
-                # CSV download
-                csv = outliers.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    label="📥 Download Flagged Data",
-                    data=csv,
-                    file_name=f"flagged_{sheet}.csv",
-                    mime="text/csv"
+                donut_chart = alt.Chart(chart_data).mark_arc(innerRadius=50).encode(
+                    theta=alt.Theta(field="Count", type="quantitative"),
+                    color=alt.Color(field="Status", type="nominal"),
+                    tooltip=["Status", "Count"]
+                ).properties(
+                    title=f"{param}"
                 )
 
-                # Violation frequency chart
-                violation_counts = outliers["Out of Spec"].str.split(", ").explode().value_counts().reset_index()
-                violation_counts.columns = ["Parameter", "Violations"]
-
-                st.markdown("#### 📉 Frequently Violated Parameters")
-                chart = alt.Chart(violation_counts).mark_bar().encode(
-                    x=alt.X("Parameter", sort="-y"),
-                    y="Violations",
-                    tooltip=["Parameter", "Violations"]
-                ).properties(width=700, height=300)
-                st.altair_chart(chart, use_container_width=True)
-
-            else:
-                st.success("✅ All samples meet standard parameters.")
-                
-            # Summary pie chart for this sheet
-            counts = df["Out of Spec"].apply(lambda x: "Violated" if x != "OK" else "OK").value_counts().reset_index()
-            counts.columns = ["Status", "Count"]
-            pie_chart = alt.Chart(counts).mark_arc(innerRadius=40).encode(
-                theta="Count",
-                color="Status",
-                tooltip=["Status", "Count"]
-            ).properties(width=400, height=300)
-            st.altair_chart(pie_chart, use_container_width=False)
-
-        except Exception as e:
-            st.error(f"❌ Error processing sheet '{sheet}': {e}")
-
-    st.markdown("---")
-    st.caption("Lab Quality Flagging Dashboard | Developed by QA Team")
+                st.altair_chart(donut_chart, use_container_width=True)
